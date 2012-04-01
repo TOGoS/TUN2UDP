@@ -112,13 +112,6 @@ int tun2udp_open_udp_sock( struct sockaddr_storage *addr, size_t addrsize ) {
   
   z = bind( sock, (struct sockaddr *)addr, addrsize );
   if( z < 0 ) {
-    //fprintf( stderr, "Parsing IPv6 address '%s'.\n", namebuf );
-    fprintf( stderr, "Binding: Address pointer = %p.\n", addr );
-    fprintf( stderr, "Binding failed for [%s]:%hu (address structure size %d).\n",
-	     inet_ntop( AF_INET6, &((struct sockaddr_in6 *)addr)->sin6_addr,
-			debug_buffer, sizeof(debug_buffer) ),
-	     ntohs(((struct sockaddr_in6 *)addr)->sin6_port), addrsize );
-    
     perror( "Failed to bind UDP socket" );
     close( sock );
     return z;
@@ -166,8 +159,6 @@ int parse_address( const char *text, struct sockaddr_storage *addr ) {
     return 1;
   }
   
-  fprintf( stderr, "Parsing: Address pointer = %p.\n", addr );
-  
   if( colonIdx >= 2 && text[0] == '[' && text[colonIdx-1] == ']' ) {
     memcpy( namebuf, text+1, colonIdx-2 );
     namebuf[colonIdx-2] = 0;
@@ -177,11 +168,6 @@ int parse_address( const char *text, struct sockaddr_storage *addr ) {
     }
     ((struct sockaddr_in6 *)addr)->sin6_family = AF_INET6;
     ((struct sockaddr_in6 *)addr)->sin6_port = htons( port );
-    
-    fprintf( stderr, "Parsing: result IP6 address is [%s]:%hu (address structure size %d).\n",
-	     inet_ntop( AF_INET6, &((struct sockaddr_in6 *)addr)->sin6_addr, debug_buffer, sizeof(debug_buffer) ),
-	     ntohs(((struct sockaddr_in6 *)addr)->sin6_port), sizeof(struct sockaddr_storage) );
-
   } else {
     memcpy( namebuf, text, colonIdx );
     namebuf[colonIdx] = 0;
@@ -262,14 +248,6 @@ int main( int argc, char **argv ) {
     fprintf( stderr, "No -remote-address given.\n" );
     return 1;
   }
-  
-  fprintf( stderr, "Main: Local address = [%s]:%hu (address structure size %d).\n",
-	   inet_ntop( AF_INET6, &((struct sockaddr_in6 *)&udp_local_addr)->sin6_addr,
-		      debug_buffer, sizeof(debug_buffer) ),
-	   ntohs(((struct sockaddr_in6 *)&udp_local_addr)->sin6_port), sizeof(udp_local_addr) );
-  
-  fprintf( stderr, "Main: Local address pointer = %p.\n", &udp_local_addr );
-  fprintf( stderr, "Main: Remote address pointer = %p.\n", &udp_remote_addr );
   
   tundev = tun2udp_create_device( devname, tunflags );
   if( tundev < 0 ) {
