@@ -18,6 +18,9 @@
 // For some debug functions:
 #include <stdio.h>
 
+static int debug = 0;
+static char debug_buffer[1024];
+
 /** Arguments taken by the function:
  *
  * @param char *dev the name of an interface (or '\0'). MUST have enough
@@ -112,7 +115,8 @@ int tun2udp_open_udp_sock( struct sockaddr_storage *addr, size_t addrsize ) {
     //fprintf( stderr, "Parsing IPv6 address '%s'.\n", namebuf );
     fprintf( stderr, "Binding: Address pointer = %p.\n", addr );
     fprintf( stderr, "Binding failed for [%s]:%hu (address structure size %d).\n",
-	     inet_ntop( AF_INET6, &((struct sockaddr_in6 *)addr)->sin6_addr, namebuf, sizeof(namebuf) ),
+	     inet_ntop( AF_INET6, &((struct sockaddr_in6 *)addr)->sin6_addr,
+			debug_buffer, sizeof(debug_buffer) ),
 	     ntohs(((struct sockaddr_in6 *)addr)->sin6_port), addrsize );
     
     perror( "Failed to bind UDP socket" );
@@ -175,7 +179,7 @@ int parse_address( const char *text, struct sockaddr_storage *addr ) {
     ((struct sockaddr_in6 *)addr)->sin6_port = htons( port );
     
     fprintf( stderr, "Parsing: result IP6 address is [%s]:%hu (address structure size %d).\n",
-	     inet_ntop( AF_INET6, &((struct sockaddr_in6 *)addr)->sin6_addr, namebuf, sizeof(namebuf) ),
+	     inet_ntop( AF_INET6, &((struct sockaddr_in6 *)addr)->sin6_addr, debug_buffer, sizeof(debug_buffer) ),
 	     ntohs(((struct sockaddr_in6 *)addr)->sin6_port), sizeof(struct sockaddr_storage) );
 
   } else {
@@ -207,7 +211,6 @@ int main( int argc, char **argv ) {
   size_t bufread;
   int local_addr_given = 0;
   int remote_addr_given = 0;
-  int debug = 0;
   
   devname[0] = 0;
   
@@ -259,9 +262,10 @@ int main( int argc, char **argv ) {
     fprintf( stderr, "No -remote-address given.\n" );
     return 1;
   }
-
+  
   fprintf( stderr, "Main: Local address = [%s]:%hu (address structure size %d).\n",
-	   inet_ntop( AF_INET6, &((struct sockaddr_in6 *)&udp_local_addr)->sin6_addr, devname, sizeof(devname) ),
+	   inet_ntop( AF_INET6, &((struct sockaddr_in6 *)&udp_local_addr)->sin6_addr,
+		      debug_buffer, sizeof(debug_buffer) ),
 	   ntohs(((struct sockaddr_in6 *)&udp_local_addr)->sin6_port), sizeof(udp_local_addr) );
   
   fprintf( stderr, "Main: Local address pointer = %p.\n", &udp_local_addr );
