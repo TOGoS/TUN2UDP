@@ -87,15 +87,35 @@ int tun2udp_read_packet( int fd, char *buffer, int buffer_size, int timeout_us )
   }
 }
 
-int tun2udp_open_udp_sock( struct sockaddr *addr, size_t addrsize ) {
+int tun2udp_open_udp_sock( struct sockaddr_storage *addr, size_t addrsize ) {
   int sock;
   int z;
-
-  sock = socket( PF_INET, SOCK_DGRAM, 0 );
-  if( sock < 0 ) return sock;
+  int pf;
+  char namebuf[1024];
   
-  z = bind( sock, addr, addrsize );
+  switch( addr->ss_family ) {
+  case( AF_INET  ): pf = PF_INET;  break;
+  case( AF_INET6 ): pf = PF_INET6; break;
+  default:
+    fprintf( stderr, "Unsupported address family #%d.\n", (int)addr->ss_family );
+    return -1;
+  }
+  
+  sock = socket( addr->ss_family, SOCK_DGRAM, 0 );
+  if( sock < 0 ) {
+    perror( "Failed to open UDP socket" );
+    return sock;
+  }
+  
+  z = bind( sock, (struct sockaddr *)addr, addrsize );
   if( z < 0 ) {
+    //fprintf( stderr, "Parsing IPv6 address '%s'.\n", namebuf );
+    fprintf( stderr, "Binding: Address pointer = %p.\n", addr );
+    fprintf( stderr, "Binding failed for [%s]:%hu (address structure size %d).\n",
+	     inet_ntop( AF_INET6, &((struct sockaddr_in6 *)addr)->sin6_addr, namebuf, sizeof(namebuf) ),
+	     ntohs(((struct sockaddr_in6 *)addr)->sin6_port), addrsize );
+    
+    perror( "Failed to bind UDP socket" );
     close( sock );
     return z;
   }
@@ -115,7 +135,7 @@ void set_default_remote_sockaddr_in( struct sockaddr_in *addy ) {
   addy->sin_port = htons(45714);
 }
 
-int parse_address( const char *text, struct sockaddr *addr ) {
+int parse_address( const char *text, struct sockaddr_storage *addr ) {
   int i;
   int colonIdx = -1;
   char namebuf[1024];
@@ -141,7 +161,9 @@ int parse_address( const char *text, struct sockaddr *addr ) {
     fprintf( stderr, "Failed to parse port number from '%s'.\n", text+colonIdx );
     return 1;
   }
-
+  
+  fprintf( stderr, "Parsing: Address pointer = %p.\n", addr );
+  
   if( colonIdx >= 2 && text[0] == '[' && text[colonIdx-1] == ']' ) {
     memcpy( namebuf, text+1, colonIdx-2 );
     namebuf[colonIdx-2] = 0;
@@ -151,6 +173,11 @@ int parse_address( const char *text, struct sockaddr *addr ) {
     }
     ((struct sockaddr_in6 *)addr)->sin6_family = AF_INET6;
     ((struct sockaddr_in6 *)addr)->sin6_port = htons( port );
+    
+    fprintf( stderr, "Parsing: result IP6 address is [%s]:%hu (address structure size %d).\n",
+	     inet_ntop( AF_INET6, &((struct sockaddr_in6 *)addr)->sin6_addr, namebuf, sizeof(namebuf) ),
+	     ntohs(((struct sockaddr_in6 *)addr)->sin6_port), sizeof(struct sockaddr_storage) );
+
   } else {
     memcpy( namebuf, text, colonIdx );
     namebuf[colonIdx] = 0;
@@ -173,8 +200,8 @@ int main( int argc, char **argv ) {
   int udpsock;
   int selectmax;
   // TODO: Allow INET6 addresses:
-  struct sockaddr udp_local_addr;
-  struct sockaddr udp_remote_addr;
+  struct sockaddr_storage udp_local_addr;
+  struct sockaddr_storage udp_remote_addr;
   fd_set readfds;
   char buffer[2048];
   size_t bufread;
@@ -232,19 +259,23 @@ int main( int argc, char **argv ) {
     fprintf( stderr, "No -remote-address given.\n" );
     return 1;
   }
+
+  fprintf( stderr, "Main: Local address = [%s]:%hu (address structure size %d).\n",
+	   inet_ntop( AF_INET6, &((struct sockaddr_in6 *)&udp_local_addr)->sin6_addr, devname, sizeof(devname) ),
+	   ntohs(((struct sockaddr_in6 *)&udp_local_addr)->sin6_port), sizeof(udp_local_addr) );
+  
+  fprintf( stderr, "Main: Local address pointer = %p.\n", &udp_local_addr );
+  fprintf( stderr, "Main: Remote address pointer = %p.\n", &udp_remote_addr );
   
   tundev = tun2udp_create_device( devname, tunflags );
   if( tundev < 0 ) {
-    perror( "Failed to create TUN/TAP device");
+    perror( "Failed to create TUN/TAP device" );
     return 1;
-  } else {
-    printf( "Device %s\n", devname );
+  } else if( debug ) {
+    fprintf( stderr, "Created TUN/TAP device '%s'.\n", devname );
   }
-  udpsock = tun2udp_open_udp_sock( &udp_local_addr, sizeof(struct sockaddr) );
-  if( udpsock < 0 ) {
-    perror( "Failed to create UDP socket");
-    return 1;
-  }
+  udpsock = tun2udp_open_udp_sock( &udp_local_addr, sizeof(udp_local_addr) );
+  if( udpsock < 0 ) return 1; // Error already reported
   
   selectmax = tundev > udpsock ? tundev + 1 : udpsock + 1;
   
@@ -270,7 +301,7 @@ int main( int argc, char **argv ) {
 	  fprintf( stderr, "Read %d bytes from TUN/TAP.\n", bufread );
 	}
 	// printf( "tundev has %d bytes of data\n", bufread );
-	z = sendto( udpsock, buffer, bufread, 0, &udp_remote_addr, sizeof(struct sockaddr) );
+	z = sendto( udpsock, buffer, bufread, 0, (struct sockaddr *)&udp_remote_addr, sizeof(udp_remote_addr) );
 	if( z < 0 ) {
 	  perror( "sendto() failed" );
 	}
