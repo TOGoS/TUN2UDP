@@ -18,8 +18,7 @@
 // For some debug functions:
 #include <stdio.h>
 
-static int debug = 0;
-static char debug_buffer[1024];
+static int verbosity = 10;
 
 /** Arguments taken by the function:
  *
@@ -28,7 +27,7 @@ static char debug_buffer[1024];
  * @param int flags interface flags (eg, IFF_TUN etc.)
  * @return int file descriptor (if positive) or error code (negative)
  */
-int tun2udp_create_device( char *dev, int flags ) {
+static int tun2udp_create_device( char *dev, int flags ) {
   struct ifreq ifr;
   int fd, err;
   char *clonedev = "/dev/net/tun";
@@ -70,7 +69,7 @@ int tun2udp_create_device( char *dev, int flags ) {
 /**
  * @return int positive to indicate number of bytes read, 0 if no data was reed, negative to indicate an error
  */
-int tun2udp_read_packet( int fd, char *buffer, int buffer_size, int timeout_us ) {
+static int tun2udp_read_packet( int fd, char *buffer, int buffer_size, int timeout_us ) {
   fd_set readfds;
   struct timeval timeout;
   timeout.tv_sec  = timeout_us / 1000000;
@@ -90,7 +89,7 @@ int tun2udp_read_packet( int fd, char *buffer, int buffer_size, int timeout_us )
   }
 }
 
-int tun2udp_open_udp_sock( struct sockaddr_storage *addr, size_t addrsize ) {
+static int tun2udp_open_udp_sock( struct sockaddr_storage *addr, size_t addrsize ) {
   int sock;
   int z;
   int pf;
@@ -120,19 +119,7 @@ int tun2udp_open_udp_sock( struct sockaddr_storage *addr, size_t addrsize ) {
   return sock;
 }
 
-// TODO: Delete when obsolete
-void set_default_local_sockaddr_in( struct sockaddr_in *addy ) {
-  addy->sin_family = AF_INET;
-  addy->sin_addr.s_addr = htonl(INADDR_ANY);
-  addy->sin_port = htons(45713);
-}
-void set_default_remote_sockaddr_in( struct sockaddr_in *addy ) {
-  addy->sin_family = AF_INET;
-  addy->sin_addr.s_addr = htonl(0x7F000001);
-  addy->sin_port = htons(45714);
-}
-
-int parse_address( const char *text, struct sockaddr_storage *addr ) {
+static int tun2udp_parse_address( const char *text, struct sockaddr_storage *addr ) {
   int i;
   int colonIdx = -1;
   char namebuf[1024];
@@ -182,6 +169,21 @@ int parse_address( const char *text, struct sockaddr_storage *addr ) {
   return 0;
 }
 
+static const char *usage_metatext = "Run with -? for usage information.\n";
+static const char *usage_text =
+"Usage: tun2udp\n"
+"  -local-address <host>:<port>   -- local address to bind to\n"
+"  -remote-address <host>:<port>  -- remote address to forward packets to\n"
+"  {-tun|-tap}                    -- create a TUN or TAP device\n"
+"  [-no-pi]                       -- don't include extra packet framing\n"
+"  [-debug]                       -- be extra talkative\n"
+"  [-tun-dev <devname>]           -- create the TUN/TAP device with this name\n"
+"\n"
+"Hostnames can be IPv4 or IPv6 addresses.  IPv6 addresses must be\n"
+"enclosed in square brackets, e.g.\n"
+"\n"
+"  [2001:470:0:76::2]:12345       -- host 2001:470:0:76::2, port 12345\n";
+
 int main( int argc, char **argv ) {
   char devname[128];
   int z;
@@ -189,7 +191,6 @@ int main( int argc, char **argv ) {
   int tundev;
   int udpsock;
   int selectmax;
-  // TODO: Allow INET6 addresses:
   struct sockaddr_storage udp_local_addr;
   struct sockaddr_storage udp_remote_addr;
   fd_set readfds;
@@ -197,12 +198,17 @@ int main( int argc, char **argv ) {
   size_t bufread;
   int local_addr_given = 0;
   int remote_addr_given = 0;
-  
+
+  // TODO: if device not specified, print out unless -q given.
   devname[0] = 0;
   
   for( z=1; z<argc; ++z ) {
-    if( strcmp("-debug",argv[z]) == 0 ) {
-      debug = 1;
+    if( strcmp("-q",argv[z]) == 0 ) {
+      verbosity = 0;
+    } else if( strcmp("-v",argv[z]) == 0 ) {
+      verbosity = 20;
+    } else if( strcmp("-debug",argv[z]) == 0 ) {
+      verbosity = 30;
     } else if( strcmp("-tun",argv[z]) == 0 ) {
       tunflags |= IFF_TUN;
     } else if( strcmp("-tap",argv[z]) == 0 ) {
@@ -225,7 +231,7 @@ int main( int argc, char **argv ) {
 	fprintf( stderr, "-local-address needs an additional <host>:<port> argument.\n" );
 	return 1;
       }
-      if( parse_address( argv[z], &udp_local_addr ) ) return 1;
+      if( tun2udp_parse_address( argv[z], &udp_local_addr ) ) return 1;
       local_addr_given = 1;
     } else if( strcmp("-remote-address",argv[z]) == 0 ) {
       ++z;
@@ -233,19 +239,25 @@ int main( int argc, char **argv ) {
 	fprintf( stderr, "-remote-address needs an additional <host>:<port> argument.\n" );
 	return 1;
       }
-      if( parse_address( argv[z], &udp_remote_addr ) ) return 1;
+      if( tun2udp_parse_address( argv[z], &udp_remote_addr ) ) return 1;
       remote_addr_given = 1;
+    } else if( strcmp("-?",argv[z]) == 0 || strcmp("-h",argv[z]) == 0 || strcmp("-help",argv[z]) == 0 ) {
+      fputs( usage_text, stdout );
+      return 0;
     } else {
-      fprintf( stderr, "Unrecgonized argument: %s.\n", argv[z] );
+      fprintf( stderr, "Error: Unrecgonized argument: %s.\n", argv[z] );
+      fputs( usage_metatext, stderr );
       return 1;
     }
   }
   if( !local_addr_given ) {
-    fprintf( stderr, "No -local-address given.\n" );
+    fprintf( stderr, "Error: No -local-address given.\n" );
+    fputs( usage_metatext, stderr );
     return 1;
   }
   if( !remote_addr_given ) {
-    fprintf( stderr, "No -remote-address given.\n" );
+    fprintf( stderr, "Error: No -remote-address given.\n" );
+    fputs( usage_metatext, stderr );
     return 1;
   }
   
@@ -253,8 +265,9 @@ int main( int argc, char **argv ) {
   if( tundev < 0 ) {
     perror( "Failed to create TUN/TAP device" );
     return 1;
-  } else if( debug ) {
-    fprintf( stderr, "Created TUN/TAP device '%s'.\n", devname );
+  }
+  if( verbosity >= 10 ) {
+    fprintf( stdout, "Created TUN/TAP device '%s'.\n", devname );
   }
   udpsock = tun2udp_open_udp_sock( &udp_local_addr, sizeof(udp_local_addr) );
   if( udpsock < 0 ) return 1; // Error already reported
@@ -279,7 +292,7 @@ int main( int argc, char **argv ) {
 	  fprintf( stderr, "Failed to read from %s: %s", devname, strerror(errno) );
 	  continue;
 	}
-	if( debug ) {
+	if( verbosity >= 30 ) {
 	  fprintf( stderr, "Read %d bytes from TUN/TAP.\n", bufread );
 	}
 	// printf( "tundev has %d bytes of data\n", bufread );
@@ -293,7 +306,7 @@ int main( int argc, char **argv ) {
 	  perror( "Failed to read from UDP socket" );
 	  continue;
 	}
-	if( debug ) {
+	if( verbosity >= 30 ) {
 	  fprintf( stderr, "Read %d bytes from UDP packet.\n", bufread );
 	}
 	z = write( tundev, buffer, bufread );
