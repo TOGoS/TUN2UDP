@@ -115,9 +115,60 @@ void set_default_remote_sockaddr_in( struct sockaddr_in *addy ) {
   addy->sin_port = htons(45714);
 }
 
+int parse_address( const char *text, struct sockaddr *addr ) {
+  int i;
+  int colonIdx = -1;
+  char namebuf[1024];
+  short port;
+  
+  for( i=strlen(text)-1; i>=0; --i ) {
+    if( text[i] == ':' ) {
+      colonIdx = i;
+    }
+  }
+  
+  if( colonIdx == -1 ) {
+    fprintf( stderr, "Socket address does not contain a colon: '%s'\n", text );
+    return -1;
+  }
+  if( colonIdx >= sizeof(namebuf) ) {
+    fprintf( stderr, "Hostname is too long: '%s'\n", text );
+    return -1;
+  }
+
+  if( !sscanf( text+colonIdx+1, "%hd", &port ) ) {
+    fprintf( stderr, "Failed to parse port number from '%s'.\n", text+colonIdx );
+    return 1;
+  }
+
+  if( colonIdx >= 2 && text[0] == '[' && text[colonIdx-1] == ']' ) {
+    memcpy( namebuf, text+1, colonIdx-2 );
+    namebuf[colonIdx-2] = 0;
+    inet_pton( AF_INET6, namebuf, addr );
+    if( inet_pton( AF_INET, namebuf, &((struct sockaddr_in6 *)addr)->sin6_addr ) == 0 ) {
+      fprintf( stderr, "Unrecongised IP6 address: %s.\n", namebuf );
+      return 1;
+    }
+    ((struct sockaddr_in6 *)addr)->sin6_family = AF_INET6;
+    ((struct sockaddr_in6 *)addr)->sin6_port = htons( port );
+  } else {
+    memcpy( namebuf, text, colonIdx );
+    namebuf[colonIdx] = 0;
+    if( inet_pton( AF_INET, namebuf, &((struct sockaddr_in *)addr)->sin_addr ) == 0 ) {
+      fprintf( stderr, "Unrecongised IP4 address: %s.\n", namebuf );
+      return 1;
+    }
+    ((struct sockaddr_in *)addr)->sin_family = AF_INET;
+    ((struct sockaddr_in *)addr)->sin_port = htons( port );
+  }
+    
+  return 0;
+}
+
 int main( int argc, char **argv ) {
   char devname[128];
   int z;
+  int tunflags = 0;
   int tundev;
   int udpsock;
   int selectmax;
@@ -127,13 +178,59 @@ int main( int argc, char **argv ) {
   fd_set readfds;
   char buffer[2048];
   size_t bufread;
+  int local_addr_given = 0;
+  int remote_addr_given = 0;
   
   devname[0] = 0;
   
-  set_default_local_sockaddr_in( (struct sockaddr_in *)&udp_local_addr );
-  set_default_remote_sockaddr_in( (struct sockaddr_in *)&udp_remote_addr );
+  for( z=1; z<argc; ++z ) {
+    if( strcmp("-tun",argv[z]) == 0 ) {
+      tunflags |= IFF_TUN;
+    } else if( strcmp("-tap",argv[z]) == 0 ) {
+      tunflags |= IFF_TAP;
+    } else if( strcmp("-no-pi",argv[z]) == 0 ) {
+      tunflags |= IFF_NO_PI;
+    } else if( strcmp("-pi",argv[z]) == 0 ) {
+      tunflags &= ~IFF_NO_PI;
+    } else if( strcmp("-tun-dev",argv[z]) == 0 ) {
+      ++z;
+      if( z >= argc ) {
+	fprintf( stderr, "-local-address needs an additional <host>:<port> argument.\n" );
+	return 1;
+      }
+      strncpy( devname, argv[z], sizeof(devname) );
+      devname[sizeof(devname)-1] = 0;
+    } else if( strcmp("-local-address",argv[z]) == 0 ) {
+      ++z;
+      if( z >= argc ) {
+	fprintf( stderr, "-local-address needs an additional <host>:<port> argument.\n" );
+	return 1;
+      }
+      if( parse_address( argv[z], &udp_local_addr ) ) return 1;
+      local_addr_given = 1;
+    } else if( strcmp("-remote-address",argv[z]) == 0 ) {
+      ++z;
+      if( z >= argc ) {
+	fprintf( stderr, "-remote-address needs an additional <host>:<port> argument.\n" );
+	return 1;
+      }
+      if( parse_address( argv[z], &udp_remote_addr ) ) return 1;
+      remote_addr_given = 1;
+    } else {
+      fprintf( stderr, "Unrecgonized argument: %s.\n", argv[z] );
+      return 1;
+    }
+  }
+  if( !local_addr_given ) {
+    fprintf( stderr, "No -local-address given.\n" );
+    return 1;
+  }
+  if( !remote_addr_given ) {
+    fprintf( stderr, "No -remote-address given.\n" );
+    return 1;
+  }
   
-  tundev = tun2udp_create_device( devname, IFF_TUN | IFF_NO_PI );
+  tundev = tun2udp_create_device( devname, tunflags );
   if( tundev < 0 ) {
     perror( "Failed to create TUN/TAP device");
     return 1;
