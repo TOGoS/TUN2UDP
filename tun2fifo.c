@@ -112,7 +112,9 @@ static const char *usage_text =
 "  [-debug]               -- be extra talkative\n"
 "  [-dev <devname>]       -- create the TUN/TAP device with this name\n"
 "\n"
-"If <devname> is not specified, a name will be picked automatically.\n";
+"If <devname> is not specified, a name will be picked automatically.\n"
+"\n"
+"By default, standard input/output are used to read/write packets.\n";
 
 int main( int argc, char **argv ) {
   char devname[128];
@@ -139,8 +141,8 @@ int main( int argc, char **argv ) {
   // TODO: if device not specified, print out unless -q given.
   devname[0] = 0;
   readoffset = 0;
-  write_filename = NULL;
-  read_filename = NULL;
+  write_filename = "-";
+  read_filename = "-";
   
   for( z=1; z<argc; ++z ) {
     if( strcmp("-q",argv[z]) == 0 ) {
@@ -164,16 +166,16 @@ int main( int argc, char **argv ) {
       }
       strncpy( devname, argv[z], sizeof(devname) );
       devname[sizeof(devname)-1] = 0;
-    } else if( strcmp("-read-file",argv[z]) == 0 ) {
+    } else if( strcmp("-read",argv[z]) == 0 ) {
       ++z;
       if( z >= argc ) {
-	errx( 1, "-read-file needs an additional path argument." );
+	errx( 1, "-read needs an additional path argument." );
       }
       read_filename = argv[z];
-    } else if( strcmp("-write-file",argv[z]) == 0 ) {
+    } else if( strcmp("-write",argv[z]) == 0 ) {
       ++z;
       if( z >= argc ) {
-	errx( 1, "-write-file needs an additional path argument." );
+	errx( 1, "-write needs an additional path argument." );
       }
       write_filename = argv[z];
     } else if( strcmp("-?",argv[z]) == 0 || strcmp("-h",argv[z]) == 0 || strcmp("-help",argv[z]) == 0 ) {
@@ -185,15 +187,8 @@ int main( int argc, char **argv ) {
       return 1;
     }
   }
-  if( read_filename == NULL ) {
-    warnx( "Error: No -read-file given." );
-    fputs( usage_metatext, stderr );
-    return 1;
-  }
-  if( write_filename == NULL ) {
-    warnx( "Error: No -write-file given." );
-    fputs( usage_metatext, stderr );
-    return 1;
+  if( read_filename == NULL && write_filename == NULL ) {
+    warnx( "Warning: No -read or -write given; this program will be useless!" );
   }
   
   tundev = create_tun_device( devname, tunflags );
@@ -203,15 +198,33 @@ int main( int argc, char **argv ) {
   if( verbosity >= 10 ) {
     fprintf( stdout, "Created TUN/TAP device '%s'.\n", devname );
   }
-  // Use O_RDWR instead of O_RDONLY to make select work properly
-  // http://www.outflux.net/blog/archives/2008/03/09/using-select-on-a-fifo/
-  readsock = open( read_filename, O_RDWR|O_NONBLOCK );
-  if( readsock < 0 ) {
-    err( 1, "Failed to open %s for reading", read_filename );
+  
+  if( read_filename != NULL ) {
+    // Use O_RDWR instead of O_RDONLY to make select work properly
+    // http://www.outflux.net/blog/archives/2008/03/09/using-select-on-a-fifo/
+    if( strcmp("-",read_filename) == 0 ) {
+      readsock = 0;
+    } else {
+      readsock = open( read_filename, O_RDWR|O_NONBLOCK );
+      if( readsock < 0 ) {
+	err( 1, "Failed to open %s for reading", read_filename );
+      }
+    }
+  } else {
+    readsock = -1;
   }
-  writesock = open( write_filename, O_WRONLY );
-  if( writesock < 0 ) {
-    err( 1, "Failed to open %s for writing", write_filename );
+  
+  if( write_filename != NULL ) {
+    if( strcmp("-",write_filename) == 0 ) {
+      writesock = 1;
+    } else {
+      writesock = open( write_filename, O_WRONLY|O_CREAT );
+      if( writesock < 0 ) {
+	err( 1, "Failed to open %s for writing", write_filename );
+      }
+    }
+  } else {
+    writesock = -1;
   }
   
   selectmax = tundev > readsock ? tundev + 1 : readsock + 1;
@@ -219,7 +232,7 @@ int main( int argc, char **argv ) {
   while( 1 ) {
     FD_ZERO( &readfds );
     FD_SET( tundev, &readfds );
-    FD_SET( readsock, &readfds );
+    if( readsock != -1 ) FD_SET( readsock, &readfds );
     
     z = select( selectmax, &readfds, NULL, NULL, NULL );
     if( z < 0 ) {
@@ -233,14 +246,17 @@ int main( int argc, char **argv ) {
 	} else if( verbosity >= 30 ) {
 	  fprintf( stderr, "Read %d bytes from TUN/TAP device %s.\n", bufread, devname );
 	}
-	slipbuffer[0] = SLIP_END;
-	slipbuffer2 = slip_encode( buffer, buffer+bufread, slipbuffer+1 );
-	*slipbuffer2++ = SLIP_END;
-	z = write( writesock, slipbuffer, slipbuffer2-slipbuffer );
-	if( z < 0 ) {
-	  perror( "write() to device failed" );
-	} else if( verbosity >= 30 ) {
-	  fprintf( stderr, "Wrote %d bytes to %s.\n", z, write_filename );
+	
+	if( writesock != -1 ) {
+	  slipbuffer[0] = SLIP_END;
+	  slipbuffer2 = slip_encode( buffer, buffer+bufread, slipbuffer+1 );
+	  *slipbuffer2++ = SLIP_END;
+	  z = write( writesock, slipbuffer, slipbuffer2-slipbuffer );
+	  if( z < 0 ) {
+	    perror( "write() to device failed" );
+	  } else if( verbosity >= 30 ) {
+	    fprintf( stderr, "Wrote %d bytes to %s.\n", z, write_filename );
+	  }
 	}
       } else if( FD_ISSET( readsock, &readfds ) ) {
 	bufread = read( readsock, readbuffer+readoffset, sizeof(slipbuffer)-readoffset );
