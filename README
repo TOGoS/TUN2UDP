@@ -7,13 +7,24 @@ received UDP packets back to the TUN/TAP device.
 Using tun2udp you can create simple network bridges or forward packets
 to another program for processing.
 
-To compile:
+  make tun2udp   # Compile
+  ./tun2udp -?   # Usage instructions
 
-  make tun2udp
+== TUN2FIFO ==
 
-For usage information:
+Implements a TUN or TAP driver by reading and writing SLIP-encoded
+packets from a pair of files or pipes.  TUN/TAP options are the same
+as for TUN2UDP.
 
-  ./tun2udp -?
+  make tun2fifo  # Compile
+  ./tun2fifo -?  # Usage instructions
+
+The current implementation of TUN2FIFO uses a 2kB buffer and will have
+~undefined behavior~ for packets larger than the buffer size (those
+packets will be garbled).
+
+To increase or decrease the buffer size for both tun2udp and tun2fifo,
+edit bufsize.h.
 
 == Example ==
 

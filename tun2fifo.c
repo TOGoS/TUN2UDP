@@ -18,6 +18,7 @@
 // For some debug functions:
 #include <stdio.h>
 
+#include "bufsize.h"
 #include "create_tun_device.h"
 
 #define SLIP_END     ((char)192)
@@ -127,10 +128,10 @@ int main( int argc, char **argv ) {
   char *write_filename; // Will write packets to here
   char *read_filename; // Will read packets from here
   fd_set readfds;
-  char buffer[2048];
-  char slipbuffer[4098];
+  char buffer[PACKET_BUFFER_SIZE];
+  char slipbuffer[PACKET_BUFFER_SIZE*2+2];
   char *slipbuffer2;
-  char readbuffer[4098];
+  char readbuffer[PACKET_BUFFER_SIZE*2+2];
   int readoffset = 0; // point in readbuffer at which incoming data will be written
   int readpacketoffset = 0; // beginning of unsent packet in readbuffer
   char *readpacketend; // pointer to end of completely read packet

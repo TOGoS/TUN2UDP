@@ -18,6 +18,7 @@
 // For some debug functions:
 #include <stdio.h>
 
+#include "bufsize.h"
 #include "create_tun_device.h"
 
 static int verbosity = 10;
@@ -129,7 +130,7 @@ int main( int argc, char **argv ) {
   struct sockaddr_storage udp_local_addr;
   struct sockaddr_storage udp_remote_addr;
   fd_set readfds;
-  char buffer[2048];
+  char buffer[PACKET_BUFFER_SIZE];
   size_t bufread;
   int local_addr_given = 0;
   int remote_addr_given = 0;
