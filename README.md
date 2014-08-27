@@ -34,21 +34,25 @@ hosts' IPv4 addresses and leave out the square brackets.
 
 To create a simple tunnel:
 
+```
   sudo ./tun2udp -local-address '[2001:1234::1]:55511' \
     -remote-address '[2001:9876::5]:55511' -tun -no-pi \
     -tun-dev tun2udp1 &
   sudo ip link set tun2udp1 up
   sudo ip addr add 10.9.8.1/24 dev tun2udp1
   ping 10.9.8.2
+```
 
 And on the other machine:
 
+```
   sudo ./tun2udp -local-address '[2001:9876::5]:55511' \
     -remote-address '[2001:1234::1]:55511' -tun -no-pi \
     -tun-dev tun2udp1 &
   sudo ip link set tun2udp1 up
   sudo ip addr add 10.9.8.2/24 dev tun2udp1
   ping 10.9.8.1
+```
 
 In this case you could use either -tun or -tap so long as it's the
 same on both ends.
