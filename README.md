@@ -7,8 +7,10 @@ received UDP packets back to the TUN/TAP device.
 Using tun2udp you can create simple network bridges or forward packets
 to another program for processing.
 
+```
   make tun2udp   # Compile
   ./tun2udp -?   # Usage instructions
+```
 
 ## TUN2FIFO
 
@@ -16,8 +18,10 @@ Implements a TUN or TAP driver by reading and writing SLIP-encoded
 packets from a pair of files or pipes.  TUN/TAP options are the same
 as for TUN2UDP.
 
+```
   make tun2fifo  # Compile
   ./tun2fifo -?  # Usage instructions
+```
 
 The current implementation of TUN2FIFO uses a 2kB buffer and will have
 ~undefined behavior~ for packets larger than the buffer size (those
@@ -28,8 +32,8 @@ edit bufsize.h.
 
 ## Example
 
-This example assumes we have 2 hosts with IPv6 addresses 2001:1234::1
-and 2001:9876::5.  If you want to join 2 IPv4 hosts, replace with the
+This example assumes we have 2 hosts with IPv6 addresses `2001:1234::1`
+and `2001:9876::5`.  If you want to join 2 IPv4 hosts, replace with the
 hosts' IPv4 addresses and leave out the square brackets.
 
 To create a simple tunnel:
