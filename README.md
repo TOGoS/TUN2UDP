@@ -1,4 +1,4 @@
-== TUN2UDP ==
+## TUN2UDP
 
 Implements a TUN or TAP device that simply forwards all packets from
 the device to a specified host over UDP, and the contents of any
@@ -10,7 +10,7 @@ to another program for processing.
   make tun2udp   # Compile
   ./tun2udp -?   # Usage instructions
 
-== TUN2FIFO ==
+## TUN2FIFO
 
 Implements a TUN or TAP driver by reading and writing SLIP-encoded
 packets from a pair of files or pipes.  TUN/TAP options are the same
@@ -26,7 +26,7 @@ packets will be garbled).
 To increase or decrease the buffer size for both tun2udp and tun2fifo,
 edit bufsize.h.
 
-== Example ==
+## Example
 
 This example assumes we have 2 hosts with IPv6 addresses 2001:1234::1
 and 2001:9876::5.  If you want to join 2 IPv4 hosts, replace with the
