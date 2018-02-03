@@ -24,7 +24,7 @@ as for TUN2UDP.
 ```
 
 The current implementation of TUN2FIFO uses a 2kB buffer and will have
-~undefined behavior~ for packets larger than the buffer size (those
+_undefined behavior_ for packets larger than the buffer size (those
 packets will be garbled).
 
 To increase or decrease the buffer size for both tun2udp and tun2fifo,
